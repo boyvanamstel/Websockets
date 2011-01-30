@@ -1,0 +1,205 @@
+<html>
+<head>
+	<title>Boy's websocket experiment</title>
+	<style type="text/css">
+		.client {
+			position: absolute;
+			width: 10px;
+			height: 10px;
+			background: #000;
+		}
+		.client .name {
+			position: absolute;
+			top: 5px;
+		}
+		html, body {
+  			width:  100%;
+  			height: 100%;
+  			margin: 0px;
+		}
+		#myCanvas {
+			position: absolute;
+			top:0;
+			left:0;
+			z-index: -1;
+		}
+	</style>
+</head>
+<body>
+	<ul>
+		<li>Known issues:</li>
+		<li>You have to use your keyboard to reach the input field</li>
+		<li>Adding/removing people isn't optimized, at all</li>
+		<li>It stutters, because updates are throttled :P</li>
+		<li>Webkit only (Safari/Chrome), Firefox 4 beta should work as well</li>
+	</ul>
+
+	<input type="text" id="nameField" value="Default" />
+	<input type="button" id="changeNameButton" value="Change my name" />
+
+
+	<div id="response"></div>
+	<ul id="clients"></ul>
+	<div id="canvas"></div>
+	<canvas id="myCanvas" onmousedown="drawCanvas(event)" ></canvas>
+	
+	<script type="text/javascript">
+
+	var throttle = 5;
+	var throttleCounter = 0;
+
+	var clients = Array();
+	var clientList = document.getElementById('clients');
+
+	var canvas = document.getElementById('canvas');
+	var mycanvas = document.getElementById('myCanvas');
+	mycanvas.width = window.innerWidth;
+	mycanvas.height = window.innerHeight;
+
+	var nameField = document.getElementById('nameField');
+	var changeNameButton = document.getElementById('changeNameButton');
+	
+	var prevX = 0;
+	var prevY = 0;
+
+	changeNameButton.addEventListener('click',changeName);	
+
+	var Me = function() {
+		this.id = 0;
+		this.name = null;
+	}
+	
+	function init() {
+
+		ws = new WebSocket("ws://www.boyvanamstel.nl:8080");
+
+		me = new Me();
+	
+		ws.onmessage = function(e) {
+			if(e.data) {
+				var response = JSON.parse(e.data)
+				handleMessage(response)
+			}
+		}
+
+		ws.onclose = function() {
+			console.log('closed');
+		}
+		ws.onopen = function() {
+			console.log('opened');
+		}
+		
+		document.addEventListener('mousemove',mouseMove);
+	
+	} init();
+
+	function changeName() {
+		var newName = nameField.value;
+		me.name = newName;
+
+		if(ws.readyState == 1) {
+			var data = { 'type':'namechange', 'id':me.id, 'name':me.name };
+			ws.send(JSON.stringify(data));
+		}
+	}
+	function handleMessage(response) {
+		switch(response.type) {
+			case 'sync':
+				var client;
+				
+				if(!clients[response.id]) {
+					client = clients[response.id] = new Object();
+					
+					var li = document.createElement('li');
+					li.setAttribute('id','client'+response.id);
+					clientList.appendChild(li);
+
+					var avatar = document.createElement('div');
+					avatar.setAttribute('id','avatar'+response.id);
+					avatar.setAttribute('class','client');
+					canvas.appendChild(avatar);
+					
+					var name = document.createElement('p');
+					name.setAttribute('id','name'+response.id);
+					name.setAttribute('class','name');
+					avatar.appendChild(name);
+				} else {
+					client = clients[response.id];
+				}
+
+				client.id = response.id;
+				client.name = response.name;
+				client.x = response.x;
+				client.y = response.y;
+				
+				clients[response.id] = client;
+
+				var clientLi = document.getElementById('client'+response.id);
+				var clientAvatar = document.getElementById('avatar'+response.id);
+				var clientName = document.getElementById('name'+response.id);
+
+				clientLi.innerHTML = client.name + '(x: ' + client.x + ', y: ' + client.y + ')';
+				clientAvatar.style.top = client.y -5;
+				clientAvatar.style.left = client.x -5;
+				clientName.innerHTML = client.name;
+			
+			break;
+			case 'client':
+				me.id = response.id;
+				nameField.value = response.name;
+			break;
+			case 'message':
+				var eResponse = document.getElementById('response');
+				console.log(eResponse);
+				eResponse.innerHTML = response.contents;
+			break;
+			case 'ejected':
+				clientList.removeChild(document.getElementById('client'+response.id));	
+				canvas.removeChild(document.getElementById('avatar'+response.id));
+			break;
+		}
+	}
+
+	function mouseMove(e) {
+		if(throttleCounter >= throttle) {
+			var data = { 'type':'sync', 'id':me.id, 'x':e.clientX, 'y':e.clientY };
+			ws.send(JSON.stringify(data));
+			throttleCounter = 0;
+		}
+		throttleCounter ++;
+	}
+	
+	function drawCanvas(e){
+		//Teken test
+		var c=document.getElementById("myCanvas");
+		var cxt=c.getContext("2d");
+		
+		var newX = e.clientX;
+		var newY = e.clientY;
+		
+		cxt.moveTo(prevX,prevY);
+		cxt.lineTo(newX, newY);
+		cxt.stroke();
+		
+		prevX = newX;
+		prevY = newY;
+	}
+
+	</script>
+
+<script type="text/javascript">
+
+  var _gaq = _gaq || [];
+  _gaq.push(['_setAccount', 'UA-7720147-8']);
+  _gaq.push(['_trackPageview']);
+
+  (function() {
+    var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+    ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+    var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+  })();
+
+</script>
+
+</body>
+</html>
